@@ -86,7 +86,7 @@ namespace Microsoft.Windows.Powershell.ScriptAnalyzer
                             type = paramAst.TypeName.GetReflectionType();
                         }
 
-                        if (String.Equals(paramAst.TypeName.FullName, "switch", StringComparison.OrdinalIgnoreCase))
+                        if (paramAst.TypeName.GetReflectionType() == typeof(System.Management.Automation.SwitchParameter))
                         {
                             isSwitchOrMandatory = true;
                         }
@@ -339,7 +339,8 @@ namespace Microsoft.Windows.Powershell.ScriptAnalyzer
             }
 
             return analysis.DefinedBlock == null
-                && !SpecialVars.InitializedVariables.Contains(analysis.Name, StringComparer.OrdinalIgnoreCase)
+                && !(SpecialVars.InitializedVariables.Contains(analysis.Name, StringComparer.OrdinalIgnoreCase) || 
+                SpecialVars.InitializedVariables.Contains(analysis.RealName, StringComparer.OrdinalIgnoreCase)) 
                 && !IsGlobalOrEnvironment(varTarget);
         }
 

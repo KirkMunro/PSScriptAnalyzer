@@ -50,13 +50,9 @@ namespace Microsoft.Windows.Powershell.ScriptAnalyzer.BuiltinRules
                 }
             }
 
-            IEnumerable<Ast> funcAsts = ast.FindAll(item => item is FunctionDefinitionAst || item is FunctionMemberAst, true);
-
-            // Checks whether this is a dsc resource file (we don't raise this rule for get, set and test-target resource
-            bool isDscResourceFile = Helper.Instance.IsDscResourceModule(fileName);
-
-            List<string> targetResourcesFunctions = new List<string>( new string[] { "get-targetresource", "set-targetresource", "test-targetresource" });
-
+            IEnumerable<Ast> funcAsts = ast.FindAll(item => item is FunctionDefinitionAst, true);
+            IEnumerable<Ast> funcMemberAsts = ast.FindAll(item => item is FunctionMemberAst, true);
+            
             foreach (FunctionDefinitionAst funcAst in funcAsts)
             {
                 // Finds all VariableExpressionAst.
@@ -64,13 +60,16 @@ namespace Microsoft.Windows.Powershell.ScriptAnalyzer.BuiltinRules
 
                 HashSet<string> paramVariables = new HashSet<string>();
 
-                if (isDscResourceFile && targetResourcesFunctions.Contains(funcAst.Name, StringComparer.OrdinalIgnoreCase))
+                // don't raise the rules for variables in the param block.
+                if (funcAst.Body != null && funcAst.Body.ParamBlock != null && funcAst.Body.ParamBlock.Parameters != null)
                 {
-                    // don't raise the rules for variables in the param block.
-                    if (funcAst.Body != null && funcAst.Body.ParamBlock != null && funcAst.Body.ParamBlock.Parameters != null)
-                    {
-                        paramVariables.UnionWith(funcAst.Body.ParamBlock.Parameters.Select(paramAst => paramAst.Name.VariablePath.UserPath));
-                    }
+                    paramVariables.UnionWith(funcAst.Body.ParamBlock.Parameters.Select(paramAst => paramAst.Name.VariablePath.UserPath));
+                }
+                
+                //don't raise the rules for parameters outside the param block
+                if(funcAst.Parameters != null)
+                {
+                    paramVariables.UnionWith(funcAst.Parameters.Select(paramAst => paramAst.Name.VariablePath.UserPath));
                 }
 
                 // Iterates all VariableExpressionAst and check the command name.
@@ -82,6 +81,23 @@ namespace Microsoft.Windows.Powershell.ScriptAnalyzer.BuiltinRules
                             varAst.Extent, GetName(), DiagnosticSeverity.Warning, fileName, varAst.VariablePath.UserPath);
                     }
                 }
+            }
+
+            foreach (FunctionMemberAst funcMemAst in funcMemberAsts)
+            {
+                // Finds all VariableExpressionAst.
+                IEnumerable<Ast> varAsts = funcMemAst.FindAll(testAst => testAst is VariableExpressionAst, true);
+
+                // Iterates all VariableExpressionAst and check the command name.
+                foreach (VariableExpressionAst varAst in varAsts)
+                {
+                    if (Helper.Instance.IsUninitialized(varAst, funcMemAst))
+                    {
+                        yield return new DiagnosticRecord(string.Format(CultureInfo.CurrentCulture, Strings.AvoidUninitializedVariableError, varAst.VariablePath.UserPath),
+                            varAst.Extent, GetName(), DiagnosticSeverity.Warning, fileName, varAst.VariablePath.UserPath);
+                    }
+                }
+
             }
         }
 

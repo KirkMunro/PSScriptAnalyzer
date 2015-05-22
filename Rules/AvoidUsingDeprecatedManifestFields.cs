@@ -12,7 +12,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Management.Automation.Language;
 using System.Management.Automation;
 using Microsoft.Windows.Powershell.ScriptAnalyzer.Generic;
@@ -22,50 +21,55 @@ using System.Globalization;
 namespace Microsoft.Windows.Powershell.ScriptAnalyzer.BuiltinRules
 {
     /// <summary>
-    /// MissingModuleManifestField: Run Test Module Manifest to check that none of the required fields are missing.
+    /// AvoidUsingDeprecatedManifestFields: Run Test Module Manifest to check that no deprecated fields are being used.
     /// </summary>
-    [Export(typeof (IScriptRule))]
-    public class MissingModuleManifestField : IScriptRule
+    [Export(typeof(IScriptRule))]
+    public class AvoidUsingDeprecatedManifestFields : IScriptRule
     {
         /// <summary>
-        /// AnalyzeScript: Run Test Module Manifest to check that none of the required fields are missing. From the ILintScriptRule interface.
+        /// AnalyzeScript: Run Test Module Manifest to check that no deprecated fields are being used.
         /// </summary>
         /// <param name="ast">The script's ast</param>
         /// <param name="fileName">The script's file name</param>
         /// <returns>A List of diagnostic results of this rule</returns>
         public IEnumerable<DiagnosticRecord> AnalyzeScript(Ast ast, string fileName)
         {
-            if (ast == null) throw new ArgumentNullException(Strings.NullAstErrorMessage);
+            if (ast == null)
+            {
+                throw new ArgumentNullException(Strings.NullAstErrorMessage);
+            }
 
             if (String.Equals(System.IO.Path.GetExtension(fileName), ".psd1", StringComparison.OrdinalIgnoreCase))
             {
                 var ps = System.Management.Automation.PowerShell.Create(RunspaceMode.CurrentRunspace);
-
+                IEnumerable<PSObject> result = null;
                 try
                 {
                     ps.AddCommand("Test-ModuleManifest");
                     ps.AddParameter("Path", fileName);
-                    
+
                     // Suppress warnings emitted during the execution of Test-ModuleManifest
                     // ModuleManifest rule must catch any violations (warnings/errors) and generate DiagnosticRecord(s)
-                    ps.AddParameter("WarningAction", ActionPreference.SilentlyContinue);                    
-                    ps.Invoke();
+                    ps.AddParameter("WarningAction", ActionPreference.SilentlyContinue);
+                    ps.AddParameter("WarningVariable", "Message");
+                    ps.AddScript("$Message");
+                    result = ps.Invoke();
 
-                } catch { }
+                }
+                catch
+                {}
 
-                if (ps != null && ps.HadErrors && ps.Streams != null && ps.Streams.Error != null)
+                if (result != null)
                 {
-                    foreach (var errorRecord in ps.Streams.Error)
+                    foreach (var warning in result)
                     {
-                        if (errorRecord.CategoryInfo != null && errorRecord.CategoryInfo.Category == System.Management.Automation.ErrorCategory.ResourceUnavailable
-                            && String.Equals("MissingMemberException", errorRecord.CategoryInfo.Reason, StringComparison.OrdinalIgnoreCase))
+                        if (warning.BaseObject != null)
                         {
-                            System.Diagnostics.Debug.Assert(errorRecord.Exception != null && !String.IsNullOrWhiteSpace(errorRecord.Exception.Message), Strings.NullErrorMessage);
-
                             yield return
-                                new DiagnosticRecord(errorRecord.Exception.Message, ast.Extent, GetName(), DiagnosticSeverity.Warning, fileName);
+                                new DiagnosticRecord(
+                                    String.Format(CultureInfo.CurrentCulture, warning.BaseObject.ToString()), ast.Extent,
+                                    GetName(), DiagnosticSeverity.Warning, fileName);
                         }
-
                     }
                 }
 
@@ -79,7 +83,7 @@ namespace Microsoft.Windows.Powershell.ScriptAnalyzer.BuiltinRules
         /// <returns>The name of this rule</returns>
         public string GetName()
         {
-            return string.Format(CultureInfo.CurrentCulture, Strings.NameSpaceFormat, GetSourceName(), Strings.MissingModuleManifestFieldName);
+            return string.Format(CultureInfo.CurrentCulture, Strings.NameSpaceFormat, GetSourceName(), Strings.AvoidUsingDeprecatedManifestFieldsName);
         }
 
         /// <summary>
@@ -88,7 +92,7 @@ namespace Microsoft.Windows.Powershell.ScriptAnalyzer.BuiltinRules
         /// <returns>The common name of this rule</returns>
         public string GetCommonName()
         {
-            return String.Format(CultureInfo.CurrentCulture, Strings.MissingModuleManifestFieldCommonName);
+            return String.Format(CultureInfo.CurrentCulture, Strings.AvoidUsingDeprecatedManifestFieldsCommonName);
         }
 
         /// <summary>
@@ -97,7 +101,7 @@ namespace Microsoft.Windows.Powershell.ScriptAnalyzer.BuiltinRules
         /// <returns>The description of this rule</returns>
         public string GetDescription()
         {
-            return String.Format(CultureInfo.CurrentCulture, Strings.MissingModuleManifestFieldDescription);
+            return String.Format(CultureInfo.CurrentCulture, Strings.AvoidUsingDeprecatedManifestFieldsDescription);
         }
 
         /// <summary>
